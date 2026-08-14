@@ -1,0 +1,110 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    cat <<'USAGE'
+usage: bafb <file.o> -o <bootable-output.iso>
+
+  bafb bafOS.o -o bafOS.iso
+USAGE
+}
+
+INPUT=
+OUTPUT=
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --version)
+            echo "BackAndForthBootable 0.7.1"
+            exit 0
+            ;;
+        -o)
+            if [ "$#" -lt 2 ]; then
+                echo "bafb: '-o' requires a path" >&2
+                exit 2
+            fi
+            OUTPUT=$2
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "bafb: unknown option '$1'" >&2
+            usage >&2
+            exit 2
+            ;;
+        *)
+            if [ -n "$INPUT" ]; then
+                echo "bafb: only one input file is supported" >&2
+                exit 2
+            fi
+            INPUT=$1
+            shift
+            ;;
+    esac
+done
+
+if [ "$#" -gt 0 ]; then
+    if [ -n "$INPUT" ] || [ "$#" -gt 1 ]; then
+        echo "bafb: only one input file is supported" >&2
+        exit 2
+    fi
+    INPUT=$1
+fi
+
+if [ -z "$INPUT" ] || [ -z "$OUTPUT" ]; then
+    usage >&2
+    exit 2
+fi
+
+if [ ! -f "$INPUT" ]; then
+    echo "bafb: input file not found: $INPUT" >&2
+    exit 1
+fi
+
+case "$OUTPUT" in
+    *.iso) ;;
+    *)
+        echo "bafb: output must use the .iso extension" >&2
+        exit 2
+        ;;
+esac
+
+GRUB_MKRESCUE=${GRUB_MKRESCUE:-grub-mkrescue}
+if ! command -v "$GRUB_MKRESCUE" >/dev/null 2>&1; then
+    echo "bafb: grub-mkrescue is required" >&2
+    echo "bafb: on Debian/Ubuntu install grub-pc-bin grub-common xorriso" >&2
+    exit 1
+fi
+
+TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/bafb.XXXXXX")
+cleanup() {
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT HUP INT TERM
+
+ISO_ROOT=$TMP_DIR/iso
+mkdir -p "$ISO_ROOT/boot/grub"
+cp "$INPUT" "$ISO_ROOT/boot/bafOS.o"
+
+cat > "$ISO_ROOT/boot/grub/grub.cfg" <<'EOF_CFG'
+set timeout=0
+set default=0
+
+menuentry "bafOS" {
+    multiboot /boot/bafOS.o
+    boot
+}
+EOF_CFG
+
+OUTPUT_DIR=$(dirname -- "$OUTPUT")
+mkdir -p "$OUTPUT_DIR"
+
+"$GRUB_MKRESCUE" -o "$OUTPUT" "$ISO_ROOT"
+printf 'wrote %s\n' "$OUTPUT"

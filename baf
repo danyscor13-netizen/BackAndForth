@@ -1,0 +1,344 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    cat <<'USAGE'
+usage: baf <file.baf> [--exe] [--osDev] [-o output] [--run] [--headless] [--disk image] [--ahci]
+       baf <kernel-image> --run [--headless] [--disk image] [--ahci]
+
+  baf program.baf                  write hosted LLVM IR to a.ll
+  baf program.baf -o out.ll        write hosted LLVM IR to out.ll
+  baf program.baf --exe            link a native executable to a.out
+  baf program.baf --exe -o prog    link a native executable to prog
+  baf program.baf --osDev          write bootable i386 image to a.o
+  baf program.baf --osDev -o os.o  write bootable i386 image to os.o
+  baf os.o --run                   boot an existing image in QEMU
+  baf program.baf --osDev --run    build a.o and boot it in QEMU
+  baf os.o --run --disk disk.img   attach a raw IDE disk
+  baf os.o --run --disk disk.img --ahci  attach it through AHCI
+USAGE
+}
+
+SOURCE=
+OUTPUT=
+OSDEV=0
+EXE=0
+RUN=0
+HEADLESS=0
+DISK_IMAGE=
+DISK_MODE=ide
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --version)
+            echo "BackAndForth 0.7.1"
+            exit 0
+            ;;
+        --exe)
+            EXE=1
+            shift
+            ;;
+        --osDev)
+            OSDEV=1
+            shift
+            ;;
+        --run)
+            RUN=1
+            shift
+            ;;
+        --headless)
+            HEADLESS=1
+            shift
+            ;;
+        --disk)
+            if [ "$#" -lt 2 ]; then
+                echo "baf: '--disk' requires a raw disk image" >&2
+                exit 2
+            fi
+            DISK_IMAGE=$2
+            shift 2
+            ;;
+        --ahci)
+            DISK_MODE=ahci
+            shift
+            ;;
+        -o)
+            if [ "$#" -lt 2 ]; then
+                echo "baf: '-o' requires a path" >&2
+                exit 2
+            fi
+            OUTPUT=$2
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "baf: unknown option '$1'" >&2
+            usage >&2
+            exit 2
+            ;;
+        *)
+            if [ -n "$SOURCE" ]; then
+                echo "baf: only one input file is supported" >&2
+                exit 2
+            fi
+            SOURCE=$1
+            shift
+            ;;
+    esac
+done
+
+if [ "$#" -gt 0 ]; then
+    if [ -n "$SOURCE" ] || [ "$#" -gt 1 ]; then
+        echo "baf: only one input file is supported" >&2
+        exit 2
+    fi
+    SOURCE=$1
+fi
+
+if [ -z "$SOURCE" ]; then
+    usage >&2
+    exit 2
+fi
+
+if [ ! -f "$SOURCE" ]; then
+    echo "baf: input file not found: $SOURCE" >&2
+    exit 1
+fi
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if [ -n "${BAF_HOME:-}" ]; then
+    if [ ! -f "$BAF_HOME/Makefile" ] || [ ! -d "$BAF_HOME/src" ]; then
+        echo "baf: BAF_HOME does not point to a BackAndForth source tree: $BAF_HOME" >&2
+        exit 1
+    fi
+    ROOT=$BAF_HOME
+    ASSET_ROOT=$ROOT
+    make -s -C "$ROOT" all
+    BAFC=$ROOT/build/bafc
+elif [ -f "$SCRIPT_DIR/Makefile" ] && [ -d "$SCRIPT_DIR/src" ]; then
+    ROOT=$SCRIPT_DIR
+    ASSET_ROOT=$ROOT
+    make -s -C "$ROOT" all
+    BAFC=$ROOT/build/bafc
+elif [ -x "$SCRIPT_DIR/../lib/backandforth/bafc" ]; then
+    ROOT=
+    ASSET_ROOT=$SCRIPT_DIR/../lib/backandforth
+    BAFC=$ASSET_ROOT/bafc
+else
+    ROOT=
+    ASSET_ROOT=
+    BAFC=
+fi
+
+run_image() {
+    IMAGE=$1
+    QEMU=${QEMU:-qemu-system-i386}
+
+    if [ -n "$DISK_IMAGE" ] && [ ! -f "$DISK_IMAGE" ]; then
+        echo "baf: disk image not found: $DISK_IMAGE" >&2
+        exit 1
+    fi
+
+    if ! command -v "$QEMU" >/dev/null 2>&1; then
+        echo "baf: $QEMU is required for --run" >&2
+        exit 1
+    fi
+
+    DISPLAY_MODE=gtk
+    if [ "$HEADLESS" -eq 1 ]; then DISPLAY_MODE=none; fi
+
+    if [ -z "$DISK_IMAGE" ]; then
+        exec "$QEMU" \
+            -machine pc -m 32M -kernel "$IMAGE" \
+            -display "$DISPLAY_MODE" -monitor none -serial none \
+            -debugcon stdio -global isa-debugcon.iobase=0xe9 \
+            -no-reboot -no-shutdown
+    fi
+
+    if [ "$DISK_MODE" = ahci ]; then
+        exec "$QEMU" \
+            -machine q35 -m 32M -kernel "$IMAGE" \
+            -device ich9-ahci,id=bafahci \
+            -drive "file=$DISK_IMAGE,format=raw,if=none,id=bafdisk" \
+            -device ide-hd,drive=bafdisk,bus=bafahci.0 \
+            -display "$DISPLAY_MODE" -monitor none -serial none \
+            -debugcon stdio -global isa-debugcon.iobase=0xe9 \
+            -no-reboot -no-shutdown
+    fi
+
+    exec "$QEMU" \
+        -machine pc -m 32M -kernel "$IMAGE" \
+        -drive "file=$DISK_IMAGE,format=raw,if=ide,index=0,media=disk" \
+        -display "$DISPLAY_MODE" -monitor none -serial none \
+        -debugcon stdio -global isa-debugcon.iobase=0xe9 \
+        -no-reboot -no-shutdown
+}
+
+case "$SOURCE" in
+    *.baf)
+        ;;
+    *)
+        if [ "$RUN" -ne 1 ] || [ "$OSDEV" -eq 1 ] || [ -n "$OUTPUT" ]; then
+            echo "baf: non-.baf inputs are only accepted with --run" >&2
+            exit 2
+        fi
+        run_image "$SOURCE"
+        ;;
+esac
+
+if [ -z "$BAFC" ] || [ ! -x "$BAFC" ]; then
+    echo "baf: cannot find bafc; run it from the project or set BAF_HOME" >&2
+    exit 1
+fi
+
+# A bare --run still means "build an OS image and boot it", but --run --exe
+# means "build a native program and execute it".
+if [ "$RUN" -eq 1 ] && [ "$OSDEV" -eq 0 ] && [ "$EXE" -eq 0 ]; then
+    OSDEV=1
+fi
+
+if [ "$OSDEV" -eq 1 ] && [ "$EXE" -eq 1 ]; then
+    echo "baf: '--exe' and '--osDev' are mutually exclusive" >&2
+    exit 2
+fi
+
+if [ "$OSDEV" -eq 0 ] && [ "$EXE" -eq 0 ]; then
+    : "${OUTPUT:=a.ll}"
+    exec "$BAFC" "$SOURCE" -o "$OUTPUT"
+fi
+
+if [ "$EXE" -eq 1 ]; then
+    : "${OUTPUT:=a.out}"
+    CLANG=${CLANG:-clang}
+
+    if [ -z "$ASSET_ROOT" ]; then
+        echo "baf: cannot find the hosted runtime" >&2
+        exit 1
+    fi
+
+    HOST_RUNTIME=$ASSET_ROOT/runtime/posix.ll
+    case "$(uname -s 2>/dev/null || echo unknown)" in
+        MINGW*|MSYS*|CYGWIN*) HOST_RUNTIME=$ASSET_ROOT/runtime/windows.ll ;;
+    esac
+
+    if [ ! -f "$HOST_RUNTIME" ]; then
+        echo "baf: missing hosted runtime: $HOST_RUNTIME" >&2
+        exit 1
+    fi
+    if ! command -v "$CLANG" >/dev/null 2>&1; then
+        echo "baf: clang is required for --exe" >&2
+        exit 1
+    fi
+
+    EXE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/baf-exe.XXXXXX")
+    trap 'rm -rf "$EXE_TMP"' EXIT HUP INT TERM
+
+    "$BAFC" "$SOURCE" -o "$EXE_TMP/program.ll" >/dev/null
+    "$CLANG" -Wno-override-module "$EXE_TMP/program.ll" "$HOST_RUNTIME" -o "$OUTPUT"
+
+    rm -rf "$EXE_TMP"
+    trap - EXIT HUP INT TERM
+
+    printf 'wrote %s\n' "$OUTPUT"
+
+    if [ "$RUN" -eq 1 ]; then
+        case "$OUTPUT" in
+            /*) exec "$OUTPUT" ;;
+            *)  exec "./$OUTPUT" ;;
+        esac
+    fi
+    exit 0
+fi
+
+: "${OUTPUT:=a.o}"
+CLANG=${CLANG:-clang}
+LD_LLD=${LD_LLD:-ld.lld}
+
+if [ -z "$ASSET_ROOT" ]; then
+    echo "baf: cannot find the i386 runtime and boot files" >&2
+    exit 1
+fi
+
+for REQUIRED in \
+    "$ASSET_ROOT/runtime/i386-abi.ll" \
+    "$ASSET_ROOT/runtime/i386-core.c" \
+    "$ASSET_ROOT/runtime/i386-disk.c" \
+    "$ASSET_ROOT/arch/i386/boot.S" \
+    "$ASSET_ROOT/arch/i386/linker.ld"
+do
+    if [ ! -f "$REQUIRED" ]; then
+        echo "baf: missing OS development asset: $REQUIRED" >&2
+        exit 1
+    fi
+done
+
+if ! command -v "$CLANG" >/dev/null 2>&1; then
+    echo "baf: clang is required for --osDev" >&2
+    exit 1
+fi
+if ! command -v "$LD_LLD" >/dev/null 2>&1; then
+    echo "baf: ld.lld is required for --osDev" >&2
+    exit 1
+fi
+
+if [ -n "${OBJCOPY:-}" ]; then
+    OBJCOPY_TOOL=$OBJCOPY
+elif command -v llvm-objcopy >/dev/null 2>&1; then
+    OBJCOPY_TOOL=llvm-objcopy
+elif command -v objcopy >/dev/null 2>&1; then
+    OBJCOPY_TOOL=objcopy
+else
+    echo "baf: llvm-objcopy or objcopy is required for --osDev" >&2
+    exit 1
+fi
+
+TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/baf-osdev.XXXXXX")
+cleanup() {
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT HUP INT TERM
+
+IR=$TMP_DIR/program.ll
+PROGRAM_OBJ=$TMP_DIR/program.o
+ABI_OBJ=$TMP_DIR/runtime-abi.o
+CORE_OBJ=$TMP_DIR/runtime-core.o
+DISK_OBJ=$TMP_DIR/runtime-disk.o
+BOOT_OBJ=$TMP_DIR/boot.o
+KERNEL_ELF=$TMP_DIR/kernel.elf
+
+COMMON_FLAGS="--target=i386-unknown-none -m32 -ffreestanding -fno-pic -fno-pie -fno-stack-protector -fno-builtin"
+
+"$BAFC" "$SOURCE" --target i386-freestanding -o "$IR"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -Wno-override-module -c "$IR" -o "$PROGRAM_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -Wno-override-module -c \
+    "$ASSET_ROOT/runtime/i386-abi.ll" -o "$ABI_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -std=c17 -Wall -Wextra -Werror -c \
+    "$ASSET_ROOT/runtime/i386-core.c" -o "$CORE_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -std=c17 -Wall -Wextra -Werror -c \
+    "$ASSET_ROOT/runtime/i386-disk.c" -o "$DISK_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -c "$ASSET_ROOT/arch/i386/boot.S" -o "$BOOT_OBJ"
+
+"$LD_LLD" -m elf_i386 -nostdlib -T "$ASSET_ROOT/arch/i386/linker.ld" \
+    "$BOOT_OBJ" "$PROGRAM_OBJ" "$ABI_OBJ" "$CORE_OBJ" "$DISK_OBJ" -o "$KERNEL_ELF"
+"$OBJCOPY_TOOL" -O binary "$KERNEL_ELF" "$OUTPUT"
+
+printf 'wrote %s\n' "$OUTPUT"
+
+if [ "$RUN" -eq 1 ]; then
+    trap - EXIT HUP INT TERM
+    cleanup
+    run_image "$OUTPUT"
+fi
