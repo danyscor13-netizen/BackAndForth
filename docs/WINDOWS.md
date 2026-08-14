@@ -37,7 +37,7 @@ option that adds LLVM to `PATH`.
 ## Build
 
 ```bat
-git clone <repo>
+git clone https://github.com/danyscor13-netizen/BackAndForth.git
 cd BackAndForth-0.7.0
 windows\make.bat
 ```
