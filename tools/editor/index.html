@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BackAndForth Studio</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/editor/editor.main.css">
+<style>
+  :root {
+    --chrome: #16181d;
+    --chrome-2: #1e2128;
+    --line: #2b2f3a;
+    --text: #d7dae0;
+    --muted: #878d9b;
+    --accent: #63b3ff;
+    --ok: #57c98a;
+    --warn: #e0b355;
+    --bad: #e06c75;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    font: 13px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    background: var(--chrome); color: var(--text);
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 8px 12px; background: var(--chrome-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { font-weight: 700; letter-spacing: .3px; }
+  .brand span { color: var(--accent); }
+  .ver { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group > label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  button, select, input[type=number] {
+    background: #262a33; color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: #465066; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: #1d4e7a; border-color: #2a6ea8; color: #eaf4ff; }
+  .spacer { flex: 1; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #editor { flex: 1; min-width: 0; }
+  aside {
+    width: 320px; border-left: 1px solid var(--line);
+    background: var(--chrome-2); display: flex; flex-direction: column;
+    overflow: auto;
+  }
+  aside section { border-bottom: 1px solid var(--line); padding: 10px 12px; }
+  aside h2 {
+    margin: 0 0 8px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--muted); font-weight: 600;
+  }
+  .cmd {
+    display: block; width: 100%; background: #14161b; border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px; color: #cfe4ff;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 12px; white-space: pre-wrap; word-break: break-all; margin-bottom: 6px;
+    text-align: left;
+  }
+  .cmd:hover { border-color: var(--accent); }
+  .problems { margin: 0; padding: 0; list-style: none; }
+  .problems li {
+    padding: 5px 6px; border-radius: 5px; cursor: pointer;
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  .problems li:hover { background: #262a33; }
+  .problems .at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .problems .bad { color: var(--bad); }
+  .problems .warn { color: var(--warn); }
+  .clean { color: var(--ok); }
+  .ref dt { color: var(--accent); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .ref dd { margin: 0 0 7px; color: var(--muted); font-size: 12px; }
+  footer {
+    display: flex; gap: 16px; align-items: center; padding: 4px 12px;
+    background: var(--chrome-2); border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 11px;
+  }
+  footer .dot { color: var(--ok); }
+  @media (max-width: 900px) { aside { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Back<span>And</span>Forth Studio <span class="ver">0.7.0</span></div>
+
+  <div class="group">
+    <button id="new">New</button>
+    <button id="open">Open</button>
+    <button id="save" class="primary">Save</button>
+  </div>
+
+  <div class="group">
+    <label for="examples">Example</label>
+    <select id="examples"></select>
+  </div>
+
+  <div class="group">
+    <label for="theme">Theme</label>
+    <select id="theme"></select>
+  </div>
+
+  <div class="group">
+    <label for="fontsize">Size</label>
+    <input id="fontsize" type="number" min="9" max="30" value="14" style="width:60px">
+  </div>
+
+  <div class="group">
+    <button id="wrap">Wrap: off</button>
+    <button id="minimap">Minimap: on</button>
+    <button id="format">Format</button>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="group"><span id="filename">untitled.baf</span></div>
+</header>
+
+<main>
+  <div id="editor"></div>
+  <aside>
+    <section>
+      <h2>Build commands</h2>
+      <button class="cmd" data-copy>baf {file} --exe --run</button>
+      <button class="cmd" data-copy>baf {file} --exe -o {stem}</button>
+      <button class="cmd" data-copy>bafc {file} --check</button>
+      <button class="cmd" data-copy>baf {file} --osDev --run</button>
+      <div style="color:var(--muted);font-size:11px">Click a command to copy it.</div>
+    </section>
+    <section>
+      <h2>Problems <span id="problem-count" class="clean"></span></h2>
+      <ul class="problems" id="problems"></ul>
+    </section>
+    <section>
+      <h2>Quick reference</h2>
+      <dl class="ref">
+        <dt>if / elsif / else</dt>
+        <dd>Conditions are bool. Braces always required.</dd>
+        <dt>for (init; cond; step)</dt>
+        <dd>All three parts optional. continue runs the step.</dd>
+        <dt>func -&gt; name(a: int) : int</dt>
+        <dd>Return type after ':'. Omit it for void.</dd>
+        <dt>"a" + 7 + true</dt>
+        <dd>'+' concatenates when either side is a str.</dd>
+        <dt>Str.* / Math.*</dt>
+        <dd>Length, Sub, Concat, FromInt, ToInt, Abs, Min, Max.</dd>
+      </dl>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  <span><span class="dot">&#9679;</span> <span id="status">ready</span></span>
+  <span id="position">Ln 1, Col 1</span>
+  <span class="spacer" style="flex:1"></span>
+  <span>Ctrl+S save &middot; Ctrl+O open &middot; F1 command palette</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Language data, shared by the tokenizer, the completions and the checker.
+// ---------------------------------------------------------------------------
+const KEYWORDS = [
+  "begin", "func", "static", "return", "void",
+  "if", "elsif", "elif", "else", "while", "for", "break", "continue",
+  "switch", "case", "default"
+];
+const TYPES = ["int", "str", "string", "bool"];
+const LITERALS = ["true", "false"];
+
+const BUILTINS = [
+  ["putsc", "putsc(${1:values})", "Prints every value, then a newline."],
+  ["putl", "putl(${1:values})", "Prints every value without a newline."],
+  ["inpt", "inpt(${1:prompt})", "Prints the prompt and reads one line as str."],
+  ["clearc", "clearc()", "Clears the screen."],
+  ["Console.Clear", "Console.Clear()", "Clears the screen."],
+  ["Console.SetTextColor", "Console.SetTextColor(${1:color})", "Sets the foreground VGA colour 0-15."],
+  ["Console.SetTextBackgroundColor", "Console.SetTextBackgroundColor(${1:color})", "Sets the background VGA colour 0-15."],
+  ["Str.Length", "Str.Length(${1:text})", "int: number of bytes in the string."],
+  ["Str.Concat", "Str.Concat(${1:left}, ${2:right})", "str: joins two strings."],
+  ["Str.Sub", "Str.Sub(${1:text}, ${2:start}, ${3:count})", "str: substring, clamped to the string."],
+  ["Str.FromInt", "Str.FromInt(${1:value})", "str: decimal text for an int."],
+  ["Str.FromBool", "Str.FromBool(${1:value})", "str: \"true\" or \"false\"."],
+  ["Str.ToInt", "Str.ToInt(${1:text})", "int: parses leading sign and digits."],
+  ["Str.Equals", "Str.Equals(${1:left}, ${2:right})", "bool: compares contents."],
+  ["Math.Abs", "Math.Abs(${1:value})", "int: absolute value."],
+  ["Math.Min", "Math.Min(${1:left}, ${2:right})", "int: smaller of two values."],
+  ["Math.Max", "Math.Max(${1:left}, ${2:right})", "int: larger of two values."],
+  ["Power.Shutdown", "Power.Shutdown()", "Powers the machine off (i386 target)."],
+  ["Power.Reboot", "Power.Reboot()", "Reboots the machine (i386 target)."],
+  ["Disk.Scan", "Disk.Scan()", "Scans the attached disks."],
+  ["Disk.Count", "Disk.Count()", "int: number of disks found."],
+  ["Disk.List", "Disk.List()", "Prints the disk table."],
+  ["Disk.Hex", "Disk.Hex(${1:disk}, ${2:lba})", "Dumps one sector as hex."],
+  ["Disk.Select", "Disk.Select(${1:disk})", "bool: chooses the active disk."],
+  ["Disk.Format", "Disk.Format()", "bool: formats the active disk."],
+  ["Disk.Files", "Disk.Files()", "Lists files in the current directory."],
+  ["Disk.Write", "Disk.Write(${1:name}, ${2:content})", "bool: writes a file."],
+  ["Disk.Read", "Disk.Read(${1:name})", "str: reads a file."],
+  ["Disk.Rem", "Disk.Rem(${1:name})", "bool: removes a file."],
+  ["Disk.Exists", "Disk.Exists(${1:name})", "bool: does the file exist?"],
+  ["Disk.Size", "Disk.Size(${1:name})", "int: file size in bytes."],
+  ["Disk.Info", "Disk.Info()", "Prints filesystem information."],
+  ["Disk.CreateDir", "Disk.CreateDir(${1:name})", "bool: creates a directory."],
+  ["Disk.GotoDir", "Disk.GotoDir(${1:name})", "bool: changes directory."],
+  ["Disk.GetDir", "Disk.GetDir()", "str: the current directory."]
+];
+
+const SNIPPETS = [
+  ["begin", "begin {\n\t$0\n}", "The program entry point."],
+  ["func", "func -> ${1:name}(${2:arg}: ${3:int}) : ${4:int} {\n\t$0\n}", "A function with a return type."],
+  ["funcvoid", "func -> ${1:name}(${2:arg}: ${3:int}) {\n\t$0\n}", "A function that returns nothing."],
+  ["if", "if (${1:condition}) {\n\t$0\n}", "Conditional."],
+  ["ifelse", "if (${1:condition}) {\n\t$2\n} else {\n\t$0\n}", "Conditional with an else."],
+  ["elsif", "elsif (${1:condition}) {\n\t$0\n}", "Extra branch."],
+  ["for", "for (int ${1:i} = 0; ${1:i} < ${2:10}; ${1:i} += 1) {\n\t$0\n}", "Counting loop."],
+  ["while", "while (${1:condition}) {\n\t$0\n}", "Loop."],
+  ["switch", "switch (${1:value}) {\n\tcase ${2:1} {\n\t\t$3\n\t}\n\tdefault {\n\t\t$0\n\t}\n}", "Multi-way branch."],
+  ["include", "[include \"${1:file.baf}\"]", "Includes another source file."]
+];
+
+const EXAMPLES = {
+  "Hello world":
+`begin {
+    putsc("Hello, BackAndForth!")
+}`,
+  "if / elsif / else":
+`func -> describe(n: int) : str {
+    if (n < 0) {
+        return "negative"
+    } elsif (n == 0) {
+        return "zero"
+    } elsif (n % 2 == 0) {
+        return "even"
+    } else {
+        return "odd"
+    }
+}
+
+begin {
+    for (int n = -2; n <= 3; n += 1) {
+        putsc(n + " is " + describe(n))
+    }
+}`,
+  "Loops, break, continue":
+`begin {
+    int total = 0
+    for (int i = 1; i <= 10; i += 1) {
+        if (i % 3 == 0) { continue }
+        if (i > 8) { break }
+        total += i
+    }
+    putsc("total = " + total)
+}`,
+  "Functions and recursion":
+`func -> factorial(n: int) : int {
+    if (n <= 1) { return 1 }
+    return n * factorial(n - 1)
+}
+
+begin {
+    putsc("factorial(6) = " + factorial(6))
+}`,
+  "Strings":
+`begin {
+    str name = "BackAndForth"
+    putsc("length    = " + Str.Length(name))
+    putsc("substring = " + Str.Sub(name, 4, 3))
+    putsc("parsed    = " + (Str.ToInt("41") + 1))
+    if (name == "BackAndForth") {
+        putsc("== compares contents")
+    }
+}`,
+  "FizzBuzz":
+`func -> fizzbuzz(n: int) : str {
+    if (n % 15 == 0) {
+        return "FizzBuzz"
+    } elsif (n % 3 == 0) {
+        return "Fizz"
+    } elsif (n % 5 == 0) {
+        return "Buzz"
+    }
+    return Str.FromInt(n)
+}
+
+begin {
+    for (int i = 1; i <= 20; i += 1) {
+        putl(fizzbuzz(i) + " ")
+    }
+    putsc("")
+}`,
+  "Interactive prompt":
+`begin {
+    str name = inpt("Your name: ")
+    if (Str.Length(name) == 0) {
+        putsc("Nothing entered.")
+    } else {
+        putsc("Hello, " + name + "!")
+    }
+}`,
+  "Switch":
+`begin {
+    str command = inpt("command> ")
+    switch (command) {
+        case "hello" { putsc("Hi there.") }
+        case "quit"  { putsc("Bye.") }
+        default      { putsc("Unknown command: " + command) }
+    }
+}`
+};
+
+// ---------------------------------------------------------------------------
+// Themes. Four are Monaco built-ins, the rest are defined here so that the
+// custom token types (baf builtins, types) get their own colours everywhere.
+// ---------------------------------------------------------------------------
+const THEMES = {
+  "Midnight (dark)":      { base: "vs-dark", bg: "1e2128", fg: "d7dae0", kw: "c792ea", ty: "82aaff", bi: "7fdbca", st: "c3e88d", nu: "f78c6c", cm: "5c6370", op: "89ddff" },
+  "Daylight (light)":     { base: "vs",      bg: "ffffff", fg: "24292f", kw: "8250df", ty: "0550ae", bi: "0a7d77", st: "0a7d34", nu: "953800", cm: "6e7781", op: "0550ae" },
+  "Ocean":                { base: "vs-dark", bg: "0f1b2a", fg: "c6d4e4", kw: "5ea8ff", ty: "56c8d8", bi: "7fd6a8", st: "9ad39b", nu: "e8b76a", cm: "4a6076", op: "9ecbff" },
+  "Forest":               { base: "vs-dark", bg: "121a14", fg: "cfe0cd", kw: "9fd356", ty: "6fc38a", bi: "b8d97a", st: "d5c98a", nu: "e0a862", cm: "5a6b58", op: "a8d5a2" },
+  "Ember":                { base: "vs-dark", bg: "1d1412", fg: "e6d5cd", kw: "ff8f6b", ty: "ffb877", bi: "ffd08a", st: "b6d47c", nu: "ff9e64", cm: "7a635a", op: "ffb4a2" },
+  "Grape":                { base: "vs-dark", bg: "1b1524", fg: "ddd2ec", kw: "c792ea", ty: "b39ddb", bi: "9fe8d8", st: "cbe38b", nu: "f0a3c8", cm: "6a5c7d", op: "d0b8ff" },
+  "Slate":                { base: "vs-dark", bg: "22262b", fg: "cdd3da", kw: "9db3c8", ty: "8fbcbb", bi: "a3be8c", st: "b3d08f", nu: "d08770", cm: "657181", op: "b0c4d8" },
+  "Solar (light)":        { base: "vs",      bg: "fdf6e3", fg: "3b4650", kw: "859900", ty: "268bd2", bi: "2aa198", st: "2aa198", nu: "cb4b16", cm: "93a1a1", op: "6c71c4" },
+  "Paper (light)":        { base: "vs",      bg: "faf9f5", fg: "2f2f2f", kw: "9a3f6b", ty: "1f6f8b", bi: "1c7a67", st: "3f7d20", nu: "a35b00", cm: "8b8b8b", op: "5b5bd6" },
+  "Sandstone (light)":    { base: "vs",      bg: "f5efe6", fg: "3a3229", kw: "a04d20", ty: "1f6a72", bi: "2f7a4f", st: "45702a", nu: "9b5a00", cm: "8d8272", op: "6b5bb5" },
+  "Nightfall":            { base: "vs-dark", bg: "14161f", fg: "cfd3e0", kw: "8aa2ff", ty: "72d3d8", bi: "9ee6b8", st: "d6e08a", nu: "ffab70", cm: "555c72", op: "a5b4ff" },
+  "Terminal green":       { base: "hc-black",bg: "000000", fg: "6ee06e", kw: "9dff9d", ty: "5ad9c0", bi: "b6ff7a", st: "d7ff8a", nu: "ffe066", cm: "3f7a3f", op: "9dff9d" },
+  "High contrast (dark)": { base: "hc-black",bg: "000000", fg: "ffffff", kw: "6ab7ff", ty: "5ed6c9", bi: "9cffb0", st: "ffe08a", nu: "ffb86c", cm: "8a8a8a", op: "ffffff" },
+  "High contrast (light)":{ base: "hc-light",bg: "ffffff", fg: "000000", kw: "6f00c4", ty: "004a99", bi: "006b60", st: "006622", nu: "8a3a00", cm: "555555", op: "000000" }
+};
+
+// ---------------------------------------------------------------------------
+// A lightweight checker. It is not the compiler; it catches the mistakes that
+// are cheap to catch in the browser so the round trip to bafc is shorter.
+// ---------------------------------------------------------------------------
+function analyse(text) {
+  const problems = [];
+  const lines = text.split("\n");
+  const stack = [];
+  let inBlockComment = false;
+  let beginCount = 0;
+
+  lines.forEach((raw, index) => {
+    const lineNumber = index + 1;
+    let line = "";
+    for (let i = 0; i < raw.length; i++) {
+      if (inBlockComment) {
+        if (raw[i] === "*" && raw[i + 1] === "/") { inBlockComment = false; i++; }
+        continue;
+      }
+      if (raw[i] === "/" && raw[i + 1] === "/") break;
+      if (raw[i] === "/" && raw[i + 1] === "*") { inBlockComment = true; i++; continue; }
+      if (raw[i] === '"') {
+        const start = i;
+        i++;
+        let closed = false;
+        for (; i < raw.length; i++) {
+          if (raw[i] === "\\") { i++; continue; }
+          if (raw[i] === '"') { closed = true; break; }
+        }
+        if (!closed) {
+          problems.push({ line: lineNumber, column: start + 1, severity: 8,
+                          message: "unterminated string literal" });
+        }
+        line += " ";
+        continue;
+      }
+      line += raw[i];
+    }
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === "{" || ch === "(") stack.push({ ch, line: lineNumber, column: i + 1 });
+      if (ch === "}" || ch === ")") {
+        const want = ch === "}" ? "{" : "(";
+        const top = stack.pop();
+        if (!top) {
+          problems.push({ line: lineNumber, column: i + 1, severity: 8,
+                          message: "unmatched '" + ch + "'" });
+        } else if (top.ch !== want) {
+          problems.push({ line: lineNumber, column: i + 1, severity: 8,
+                          message: "'" + ch + "' closes a '" + top.ch + "' opened on line " + top.line });
+        }
+      }
+    }
+
+    if (/^\s*begin\b/.test(line)) beginCount++;
+
+    if (/\belsif\s*\(/.test(line) === false && /\belse\s+if\b/.test(line)) {
+      problems.push({ line: lineNumber, column: 1, severity: 4,
+                      message: "'else if' works, but 'elsif' is the usual spelling" });
+    }
+    const assignInCondition = line.match(/\b(if|while)\s*\([^)=!<>]*[^=!<>]=[^=]/);
+    if (assignInCondition) {
+      problems.push({ line: lineNumber, column: 1, severity: 4,
+                      message: "'=' assigns; conditions usually want '=='" });
+    }
+    if (/\b(if|while|for|switch)\s*\(.*\)\s*$/.test(line.trim()) &&
+        !/\{\s*$/.test(line.trim())) {
+      const next = (lines[index + 1] || "").trim();
+      if (next && !next.startsWith("{")) {
+        problems.push({ line: lineNumber, column: 1, severity: 8,
+                        message: "this statement needs a '{ ... }' block" });
+      }
+    }
+  });
+
+  stack.forEach(open => {
+    problems.push({ line: open.line, column: open.column, severity: 8,
+                    message: "'" + open.ch + "' is never closed" });
+  });
+
+  if (inBlockComment) {
+    problems.push({ line: lines.length, column: 1, severity: 8,
+                    message: "unterminated block comment" });
+  }
+  if (beginCount === 0) {
+    problems.push({ line: 1, column: 1, severity: 4,
+                    message: "a program needs one 'begin { ... }' block" });
+  } else if (beginCount > 1) {
+    problems.push({ line: 1, column: 1, severity: 8,
+                    message: "a program may contain only one 'begin' block" });
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
+// Editor bootstrap.
+// ---------------------------------------------------------------------------
+require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" } });
+
+require(["vs/editor/editor.main"], function () {
+  monaco.languages.register({ id: "backandforth", extensions: [".baf"], aliases: ["BackAndForth", "baf"] });
+
+  monaco.languages.setLanguageConfiguration("backandforth", {
+    comments: { lineComment: "//", blockComment: ["/*", "*/"] },
+    brackets: [["{", "}"], ["[", "]"], ["(", ")"]],
+    autoClosingPairs: [
+      { open: "{", close: "}" }, { open: "[", close: "]" },
+      { open: "(", close: ")" }, { open: '"', close: '"', notIn: ["string"] }
+    ],
+    surroundingPairs: [
+      { open: "{", close: "}" }, { open: "[", close: "]" },
+      { open: "(", close: ")" }, { open: '"', close: '"' }
+    ],
+    indentationRules: {
+      increaseIndentPattern: /\{\s*$/,
+      decreaseIndentPattern: /^\s*\}/
+    }
+  });
+
+  monaco.languages.setMonarchTokensProvider("backandforth", {
+    keywords: KEYWORDS,
+    typeKeywords: TYPES,
+    literals: LITERALS,
+    operators: ["=", "+", "-", "*", "/", "%", "+=", "-=", "*=", "/=", "%=",
+                "==", "!=", "<", "<=", ">", ">=", "&&", "||", "!", "->", ":"],
+    symbols: /[=><!~?:&|+\-*\/^%]+/,
+    escapes: /\\[nrt\\"]/,
+    tokenizer: {
+      root: [
+        [/\[\s*include\b/, { token: "keyword.directive", next: "@include" }],
+        [/->/, "keyword.arrow"],
+        [/[A-Z][\w]*(?:\.[A-Za-z_]\w*)+/, "support.function"],
+        [/[a-z][\w]*(?:\.[A-Za-z_]\w*)+/, "support.function"],
+        [/[a-zA-Z_]\w*(?=\s*\()/, {
+          cases: {
+            "@keywords": "keyword",
+            "@default": "entity.name.function"
+          }
+        }],
+        [/[a-zA-Z_]\w*/, {
+          cases: {
+            "@typeKeywords": "type",
+            "@literals": "constant.language",
+            "@keywords": "keyword",
+            "@default": "identifier"
+          }
+        }],
+        { include: "@whitespace" },
+        [/[{}()\[\]]/, "@brackets"],
+        [/@symbols/, { cases: { "@operators": "operator", "@default": "" } }],
+        [/\d+/, "number"],
+        [/[;,.]/, "delimiter"],
+        [/"([^"\\]|\\.)*$/, "string.invalid"],
+        [/"/, { token: "string.quote", bracket: "@open", next: "@string" }]
+      ],
+      include: [
+        [/"([^"\\]|\\.)*"/, "string"],
+        [/\]/, { token: "keyword.directive", next: "@pop" }],
+        [/./, "keyword.directive"]
+      ],
+      string: [
+        [/[^\\"]+/, "string"],
+        [/@escapes/, "string.escape"],
+        [/\\./, "string.escape.invalid"],
+        [/"/, { token: "string.quote", bracket: "@close", next: "@pop" }]
+      ],
+      whitespace: [
+        [/[ \t\r\n]+/, ""],
+        [/\/\*/, "comment", "@comment"],
+        [/\/\/.*$/, "comment"]
+      ],
+      comment: [
+        [/[^\/*]+/, "comment"],
+        [/\*\//, "comment", "@pop"],
+        [/[\/*]/, "comment"]
+      ]
+    }
+  });
+
+  Object.entries(THEMES).forEach(([name, t]) => {
+    monaco.editor.defineTheme(themeId(name), {
+      base: t.base,
+      inherit: true,
+      rules: [
+        { token: "keyword", foreground: t.kw, fontStyle: "bold" },
+        { token: "keyword.arrow", foreground: t.kw },
+        { token: "keyword.directive", foreground: t.kw },
+        { token: "type", foreground: t.ty },
+        { token: "constant.language", foreground: t.nu },
+        { token: "support.function", foreground: t.bi },
+        { token: "entity.name.function", foreground: t.bi },
+        { token: "string", foreground: t.st },
+        { token: "string.escape", foreground: t.nu },
+        { token: "number", foreground: t.nu },
+        { token: "comment", foreground: t.cm, fontStyle: "italic" },
+        { token: "operator", foreground: t.op }
+      ],
+      colors: {
+        "editor.background": "#" + t.bg,
+        "editor.foreground": "#" + t.fg,
+        "editorLineNumber.foreground": "#" + t.cm
+      }
+    });
+  });
+
+  monaco.languages.registerCompletionItemProvider("backandforth", {
+    triggerCharacters: ["."],
+    provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position);
+      const range = {
+        startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+        startColumn: word.startColumn, endColumn: word.endColumn
+      };
+      const items = [];
+      const Kind = monaco.languages.CompletionItemKind;
+      const Rule = monaco.languages.CompletionItemInsertTextRule;
+
+      KEYWORDS.forEach(k => items.push({ label: k, kind: Kind.Keyword, insertText: k, range }));
+      TYPES.forEach(t => items.push({ label: t, kind: Kind.TypeParameter, insertText: t, range }));
+      LITERALS.forEach(l => items.push({ label: l, kind: Kind.Value, insertText: l, range }));
+      BUILTINS.forEach(([label, insert, detail]) => items.push({
+        label, kind: Kind.Function, detail, insertText: insert,
+        insertTextRules: Rule.InsertAsSnippet, range
+      }));
+      SNIPPETS.forEach(([label, insert, detail]) => items.push({
+        label, kind: Kind.Snippet, detail, insertText: insert,
+        insertTextRules: Rule.InsertAsSnippet, range,
+        sortText: "0" + label
+      }));
+
+      // Words already in the document, so local names complete too.
+      const seen = new Set(items.map(i => i.label));
+      (model.getValue().match(/[A-Za-z_]\w*/g) || []).forEach(w => {
+        if (!seen.has(w)) { seen.add(w); items.push({ label: w, kind: Kind.Text, insertText: w, range }); }
+      });
+      return { suggestions: items };
+    }
+  });
+
+  monaco.languages.registerHoverProvider("backandforth", {
+    provideHover(model, position) {
+      const word = model.getWordAtPosition(position);
+      if (!word) return null;
+      const line = model.getLineContent(position.lineNumber);
+      const qualified = (line.slice(0, word.endColumn - 1).match(/[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/) || [word.word])[0];
+      const hit = BUILTINS.find(b => b[0] === qualified) || BUILTINS.find(b => b[0] === word.word);
+      if (hit) {
+        return { contents: [{ value: "**" + hit[0] + "**" }, { value: hit[2] }] };
+      }
+      const doc = {
+        begin: "The program entry point. Exactly one per program.",
+        func: "Declares a function: `func -> name(a: int) : int { ... }`.",
+        static: "Gives the function internal linkage.",
+        elsif: "An extra condition after `if`. `elif` and `else if` also work.",
+        break: "Leaves the innermost while or for loop.",
+        continue: "Starts the next iteration. In a for loop it runs the step first.",
+        return: "Leaves the function, optionally with a value.",
+        switch: "Multi-way branch on an int, str or bool. Cases never fall through."
+      }[word.word];
+      return doc ? { contents: [{ value: "**" + word.word + "**" }, { value: doc }] } : null;
+    }
+  });
+
+  // ---- editor instance --------------------------------------------------
+  const saved = localStorage.getItem("baf.source");
+  const editor = monaco.editor.create(document.getElementById("editor"), {
+    value: saved !== null ? saved : EXAMPLES["if / elsif / else"],
+    language: "backandforth",
+    theme: themeId(localStorage.getItem("baf.theme") || "Midnight (dark)"),
+    fontSize: Number(localStorage.getItem("baf.fontsize") || 14),
+    fontFamily: 'ui-monospace, "Cascadia Code", Consolas, "Courier New", monospace',
+    automaticLayout: true,
+    minimap: { enabled: true },
+    tabSize: 4,
+    insertSpaces: true,
+    renderWhitespace: "selection",
+    scrollBeyondLastLine: false,
+    bracketPairColorization: { enabled: true },
+    smoothScrolling: true,
+    cursorBlinking: "smooth"
+  });
+
+  let filename = localStorage.getItem("baf.filename") || "untitled.baf";
+  let fileHandle = null;
+  setFilename(filename);
+
+  // ---- problems ---------------------------------------------------------
+  const problemList = document.getElementById("problems");
+  const problemCount = document.getElementById("problem-count");
+
+  function refreshProblems() {
+    const model = editor.getModel();
+    const problems = analyse(model.getValue());
+    monaco.editor.setModelMarkers(model, "baf", problems.map(p => ({
+      severity: p.severity === 8 ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+      message: p.message,
+      startLineNumber: p.line, startColumn: p.column,
+      endLineNumber: p.line, endColumn: p.column + 1
+    })));
+
+    problemList.innerHTML = "";
+    if (problems.length === 0) {
+      problemCount.textContent = "no problems";
+      problemCount.className = "clean";
+      return;
+    }
+    problemCount.textContent = problems.length + " found";
+    problemCount.className = problems.some(p => p.severity === 8) ? "bad" : "warn";
+    problems.slice(0, 40).forEach(p => {
+      const item = document.createElement("li");
+      item.innerHTML = '<span class="at">' + p.line + ":" + p.column + "</span>" +
+                       '<span class="' + (p.severity === 8 ? "bad" : "warn") + '">' +
+                       escapeHtml(p.message) + "</span>";
+      item.onclick = () => {
+        editor.revealLineInCenter(p.line);
+        editor.setPosition({ lineNumber: p.line, column: p.column });
+        editor.focus();
+      };
+      problemList.appendChild(item);
+    });
+  }
+
+  let checkTimer = null;
+  editor.onDidChangeModelContent(() => {
+    localStorage.setItem("baf.source", editor.getValue());
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(refreshProblems, 250);
+    setStatus("edited");
+  });
+  editor.onDidChangeCursorPosition(e => {
+    document.getElementById("position").textContent =
+      "Ln " + e.position.lineNumber + ", Col " + e.position.column;
+  });
+  refreshProblems();
+
+  // ---- toolbar ----------------------------------------------------------
+  const themeSelect = document.getElementById("theme");
+  Object.keys(THEMES).forEach(name => themeSelect.add(new Option(name, name)));
+  themeSelect.value = localStorage.getItem("baf.theme") || "Midnight (dark)";
+  themeSelect.onchange = () => {
+    monaco.editor.setTheme(themeId(themeSelect.value));
+    localStorage.setItem("baf.theme", themeSelect.value);
+  };
+
+  const exampleSelect = document.getElementById("examples");
+  exampleSelect.add(new Option("Load an example…", ""));
+  Object.keys(EXAMPLES).forEach(name => exampleSelect.add(new Option(name, name)));
+  exampleSelect.onchange = () => {
+    const name = exampleSelect.value;
+    if (!name) return;
+    if (editor.getValue().trim() && !confirm("Replace the current buffer with “" + name + "”?")) {
+      exampleSelect.value = "";
+      return;
+    }
+    editor.setValue(EXAMPLES[name]);
+    setFilename(name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") + ".baf");
+    exampleSelect.value = "";
+    setStatus("loaded example");
+  };
+
+  const fontInput = document.getElementById("fontsize");
+  fontInput.value = Number(localStorage.getItem("baf.fontsize") || 14);
+  fontInput.oninput = () => {
+    const size = Math.min(30, Math.max(9, Number(fontInput.value) || 14));
+    editor.updateOptions({ fontSize: size });
+    localStorage.setItem("baf.fontsize", size);
+  };
+
+  let wrap = false;
+  const wrapButton = document.getElementById("wrap");
+  wrapButton.onclick = () => {
+    wrap = !wrap;
+    editor.updateOptions({ wordWrap: wrap ? "on" : "off" });
+    wrapButton.textContent = "Wrap: " + (wrap ? "on" : "off");
+  };
+
+  let minimap = true;
+  const minimapButton = document.getElementById("minimap");
+  minimapButton.onclick = () => {
+    minimap = !minimap;
+    editor.updateOptions({ minimap: { enabled: minimap } });
+    minimapButton.textContent = "Minimap: " + (minimap ? "on" : "off");
+  };
+
+  document.getElementById("format").onclick = () => { formatBuffer(); };
+
+  document.getElementById("new").onclick = () => {
+    if (editor.getValue().trim() && !confirm("Discard the current buffer?")) return;
+    editor.setValue("begin {\n    putsc(\"Hello, BackAndForth!\")\n}\n");
+    fileHandle = null;
+    setFilename("untitled.baf");
+    setStatus("new file");
+  };
+
+  document.getElementById("open").onclick = openFile;
+  document.getElementById("save").onclick = saveFile;
+
+  document.querySelectorAll("[data-copy]").forEach(button => {
+    button.addEventListener("click", () => {
+      const stem = filename.replace(/\.baf$/i, "");
+      const text = button.textContent.replace("{file}", filename).replace("{stem}", stem);
+      navigator.clipboard.writeText(text).then(
+        () => setStatus("copied: " + text),
+        () => setStatus("could not copy — select the text manually")
+      );
+    });
+  });
+
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveFile);
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyO, openFile);
+  editor.addAction({
+    id: "baf.format",
+    label: "BackAndForth: Reindent buffer",
+    keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
+    run: formatBuffer
+  });
+
+  // ---- file handling ----------------------------------------------------
+  async function openFile() {
+    if (window.showOpenFilePicker) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description: "BackAndForth source", accept: { "text/plain": [".baf"] } }]
+        });
+        const file = await handle.getFile();
+        editor.setValue(await file.text());
+        fileHandle = handle;
+        setFilename(file.name);
+        setStatus("opened " + file.name);
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".baf,text/plain";
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      editor.setValue(await file.text());
+      fileHandle = null;
+      setFilename(file.name);
+      setStatus("opened " + file.name);
+    };
+    input.click();
+  }
+
+  async function saveFile() {
+    const text = editor.getValue();
+    if (fileHandle) {
+      try {
+        const writable = await fileHandle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        setStatus("saved " + filename);
+        return;
+      } catch (error) {
+        setStatus("could not write the file, downloading instead");
+      }
+    }
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: "BackAndForth source", accept: { "text/plain": [".baf"] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        fileHandle = handle;
+        setFilename(handle.name);
+        setStatus("saved " + handle.name);
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatus("downloaded " + filename);
+  }
+
+  /* Reindents by brace depth. Deliberately conservative: it never reflows a
+     line, so it cannot break a program it does not fully understand. */
+  function formatBuffer() {
+    const lines = editor.getValue().split("\n");
+    let depth = 0;
+    let inComment = false;
+    const out = lines.map(raw => {
+      const line = raw.trim();
+      if (inComment) {
+        if (line.includes("*/")) inComment = false;
+        return "    ".repeat(depth) + line;
+      }
+      if (line.startsWith("/*") && !line.includes("*/")) inComment = true;
+      let stripped = line.replace(/"(\\.|[^"\\])*"/g, '""').replace(/\/\/.*$/, "");
+      const closesFirst = /^[)}\]]/.test(stripped);
+      if (closesFirst) depth = Math.max(0, depth - 1);
+      const indented = line === "" ? "" : "    ".repeat(depth) + line;
+      const opens = (stripped.match(/[{(]/g) || []).length;
+      const closes = (stripped.match(/[)}]/g) || []).length;
+      depth = Math.max(0, depth + opens - closes + (closesFirst ? 1 : 0));
+      return indented;
+    });
+    const position = editor.getPosition();
+    editor.executeEdits("format", [{
+      range: editor.getModel().getFullModelRange(),
+      text: out.join("\n")
+    }]);
+    editor.setPosition(position);
+    setStatus("reindented");
+  }
+
+  function setFilename(name) {
+    filename = name;
+    document.getElementById("filename").textContent = name;
+    localStorage.setItem("baf.filename", name);
+  }
+  function setStatus(text) {
+    document.getElementById("status").textContent = text;
+  }
+  window.addEventListener("beforeunload", () => {
+    localStorage.setItem("baf.source", editor.getValue());
+  });
+});
+
+function themeId(name) {
+  return "baf-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+function escapeHtml(text) {
+  return text.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+</script>
+</body>
+</html>
