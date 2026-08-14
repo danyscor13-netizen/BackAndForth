@@ -1,0 +1,18 @@
+begin {
+    str com = "help"
+    bool running = false
+
+    putl("> ")
+    switch (com) {
+        case "help" {
+            putsc("Ok")
+        }
+        default {
+            putsc("No")
+        }
+    }
+
+    while (running) {
+        putsc("unreachable")
+    }
+}

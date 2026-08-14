@@ -1,0 +1,12 @@
+begin {
+    Console.SetTextColor(10)
+    putsc("Light green text")
+
+    Console.SetTextBackgroundColor(1)
+    Console.SetTextColor(15)
+    putsc("White text on blue")
+
+    Console.SetTextBackgroundColor(0)
+    Console.SetTextColor(7)
+    putsc("Back to light gray on black")
+}

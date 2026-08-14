@@ -1,0 +1,64 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -gt 1 ]; then
+    echo "usage: $0 [program.baf]" >&2
+    exit 2
+fi
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SOURCE=${1:-"$ROOT/examples/kernel32_disk.baf"}
+case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$(pwd)/$SOURCE" ;;
+esac
+
+CLANG=${CLANG:-clang}
+LD_LLD=${LD_LLD:-ld.lld}
+
+if [ -n "${OBJCOPY:-}" ]; then
+    OBJCOPY_TOOL=$OBJCOPY
+elif command -v llvm-objcopy >/dev/null 2>&1; then
+    OBJCOPY_TOOL=llvm-objcopy
+elif command -v objcopy >/dev/null 2>&1; then
+    OBJCOPY_TOOL=objcopy
+else
+    echo "error: llvm-objcopy or objcopy is required" >&2
+    exit 1
+fi
+
+make -s -C "$ROOT" all
+mkdir -p "$ROOT/build/i386"
+
+BASE=$(basename "$SOURCE" .baf)
+IR="$ROOT/build/i386/$BASE.ll"
+PROGRAM_OBJ="$ROOT/build/i386/$BASE.o"
+ABI_OBJ="$ROOT/build/i386/runtime-abi.o"
+CORE_OBJ="$ROOT/build/i386/runtime-core.o"
+DISK_OBJ="$ROOT/build/i386/runtime-disk.o"
+BOOT_OBJ="$ROOT/build/i386/boot.o"
+KERNEL="$ROOT/build/i386/$BASE.elf"
+IMAGE="$ROOT/build/i386/$BASE.bin"
+
+COMMON_FLAGS="--target=i386-unknown-none -m32 -ffreestanding -fno-pic -fno-pie -fno-stack-protector -fno-builtin"
+
+"$ROOT/build/bafc" "$SOURCE" --target i386-freestanding -o "$IR"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -Wno-override-module -c "$IR" -o "$PROGRAM_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -Wno-override-module -c "$ROOT/runtime/i386-abi.ll" -o "$ABI_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -std=c17 -Wall -Wextra -Werror -c \
+    "$ROOT/runtime/i386-core.c" -o "$CORE_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -std=c17 -Wall -Wextra -Werror -c \
+    "$ROOT/runtime/i386-disk.c" -o "$DISK_OBJ"
+# shellcheck disable=SC2086
+"$CLANG" $COMMON_FLAGS -c "$ROOT/arch/i386/boot.S" -o "$BOOT_OBJ"
+
+"$LD_LLD" -m elf_i386 -nostdlib -T "$ROOT/arch/i386/linker.ld" \
+    "$BOOT_OBJ" "$PROGRAM_OBJ" "$ABI_OBJ" "$CORE_OBJ" "$DISK_OBJ" -o "$KERNEL"
+"$OBJCOPY_TOOL" -O binary "$KERNEL" "$IMAGE"
+
+printf 'built %s\n' "$KERNEL"
+printf 'built %s\n' "$IMAGE"

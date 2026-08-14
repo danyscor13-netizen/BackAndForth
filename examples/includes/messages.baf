@@ -1,0 +1,6 @@
+[include "shared.baf"]
+
+func -> included_message() {
+    shared_message()
+    putsc(" include")
+}

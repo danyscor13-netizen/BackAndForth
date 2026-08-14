@@ -1,0 +1,35 @@
+// if / elsif / else, loops, break and continue.
+
+func -> describe(n: int) : str {
+    if (n < 0) {
+        return "negative"
+    } elsif (n == 0) {
+        return "zero"
+    } elsif (n % 2 == 0) {
+        return "even"
+    } else {
+        return "odd"
+    }
+}
+
+begin {
+    for (int n = -2; n <= 3; n += 1) {
+        putsc(n + " is " + describe(n))
+    }
+
+    // Sum 1..10, skipping multiples of 3 and stopping past 8.
+    int total = 0
+    for (int i = 1; i <= 10; i += 1) {
+        if (i % 3 == 0) { continue }
+        if (i > 8) { break }
+        total += i
+    }
+    putsc("total = " + total)
+
+    int countdown = 3
+    while (countdown > 0) {
+        putl(countdown + "... ")
+        countdown -= 1
+    }
+    putsc("go")
+}

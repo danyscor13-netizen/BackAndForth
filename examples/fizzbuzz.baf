@@ -1,0 +1,19 @@
+// Everything the language needs for a classic exercise.
+
+func -> fizzbuzz(n: int) : str {
+    if (n % 15 == 0) {
+        return "FizzBuzz"
+    } elsif (n % 3 == 0) {
+        return "Fizz"
+    } elsif (n % 5 == 0) {
+        return "Buzz"
+    }
+    return Str.FromInt(n)
+}
+
+begin {
+    for (int i = 1; i <= 20; i += 1) {
+        putl(fizzbuzz(i) + " ")
+    }
+    putsc("")
+}

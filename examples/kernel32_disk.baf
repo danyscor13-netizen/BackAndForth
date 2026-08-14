@@ -1,0 +1,116 @@
+begin {
+    putsc("Welcome to bafOS!")
+    putsc("Milestone 3: disks, AHCI, and BAFS files.")
+    putsc("Type 'help' for the commands.")
+
+    Disk.Scan()
+
+    str com
+
+    while (true) {
+        com = inpt("> ")
+
+        switch (com) {
+            case "help" {
+                putsc("Commands: help, about, disks, select0, info, format, files, mkdir, cd, pwd, write, read, rem, exists, sector0, clear, reboot, deboot")
+            }
+
+            case "about" {
+                putsc("bafOS milestone 3 - IDE PIO, AHCI/SATA DMA, and BAFS1")
+            }
+
+            case "disks" {
+                Disk.List()
+            }
+
+            case "select0" {
+                disk.select(0)
+            }
+
+            case "info" {
+                disk.info()
+            }
+
+            case "format" {
+                putsc("Formatting selected disk as BAFS1...")
+                disk.format()
+            }
+
+            case "files" {
+                disk.files()
+            }
+
+
+            case "mkdir" {
+                str name
+                name = inpt("directory: ")
+                Disk.CreateDir(name)
+            }
+
+            case "cd" {
+                str name
+                name = inpt("directory: ")
+                Disk.GotoDir(name)
+            }
+
+            case "pwd" {
+                putsc(Disk.GetDir())
+            }
+
+            case "write" {
+                str name
+                str content
+                name = inpt("name: ")
+                content = inpt("content: ")
+                disk.write(name, content)
+            }
+
+            case "read" {
+                str name
+                name = inpt("name: ")
+                putsc(disk.read(name))
+            }
+
+            case "rem" {
+                str name
+                name = inpt("name: ")
+                disk.rem(name)
+            }
+
+            case "exists" {
+                str name
+                name = inpt("name: ")
+                switch (disk.exists(name)) {
+                    case true {
+                        putsc("yes")
+                    }
+                    case false {
+                        putsc("no")
+                    }
+                }
+            }
+
+            case "sector0" {
+                Disk.Hex(disk: 0, lba: 0)
+            }
+
+            case "clear" {
+                Console.Clear()
+            }
+
+            case "reboot" {
+                putsc("Rebooting...")
+                Power.Reboot()
+            }
+
+            case "deboot" {
+                putsc("Shutting down...")
+                Power.Shutdown()
+            }
+
+            default {
+                putsc("Unknown command. Type 'help'.")
+            }
+        }
+    }
+}

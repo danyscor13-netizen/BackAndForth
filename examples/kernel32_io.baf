@@ -1,0 +1,49 @@
+begin {
+    putsc("Welcome to bafOS!")
+    putsc("Milestone 3: disk and controller drivers.")
+    putsc("Type 'help' for the commands.")
+
+    Disk.Scan()
+
+    str com
+
+    while (true) {
+        com = inpt("> ")
+
+        switch (com) {
+            case "help" {
+                putsc("Commands: help, about, disks, sector0, clear, reboot, deboot")
+            }
+
+            case "about" {
+                putsc("bafOS milestone 3 - IDE PIO and AHCI/SATA reads")
+            }
+
+            case "disks" {
+                Disk.List()
+            }
+
+            case "sector0" {
+                Disk.Hex(disk: 0, lba: 0)
+            }
+
+            case "clear" {
+                Console.Clear()
+            }
+
+            case "reboot" {
+                putsc("Rebooting...")
+                Power.Reboot()
+            }
+
+            case "deboot" {
+                putsc("Shutting down...")
+                Power.Shutdown()
+            }
+
+            default {
+                putsc("Unknown command. Type 'help'.")
+            }
+        }
+    }
+}

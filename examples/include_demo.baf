@@ -1,0 +1,6 @@
+[include "includes/messages.baf"]
+[include "includes/shared.baf"] // duplicate includes are ignored
+
+begin {
+    included_message()
+}

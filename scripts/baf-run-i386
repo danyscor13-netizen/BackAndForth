@@ -1,0 +1,67 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+HEADLESS=0
+SOURCE="$ROOT/examples/kernel32_disk.baf"
+DISK_IMAGE=
+DISK_MODE=ide
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --headless) HEADLESS=1; shift ;;
+        --disk)
+            [ "$#" -ge 2 ] || { echo "usage: $0 [--headless] [--disk image] [--ahci] [program.baf]" >&2; exit 2; }
+            DISK_IMAGE=$2; shift 2 ;;
+        --ahci) DISK_MODE=ahci; shift ;;
+        *.baf) SOURCE=$1; shift ;;
+        *)
+            echo "usage: $0 [--headless] [--disk image] [--ahci] [program.baf]" >&2
+            exit 2
+            ;;
+    esac
+done
+
+"$ROOT/scripts/baf-kernel32" "$SOURCE"
+BASE=$(basename "$SOURCE" .baf)
+IMAGE="$ROOT/build/i386/$BASE.bin"
+QEMU=${QEMU:-qemu-system-i386}
+
+if ! command -v "$QEMU" >/dev/null 2>&1; then
+    echo "error: $QEMU is not installed" >&2
+    echo "install qemu-system-x86, then rerun this command" >&2
+    exit 1
+fi
+
+DISPLAY_ARGS="-display gtk"
+if [ "$HEADLESS" -eq 1 ]; then
+    DISPLAY_ARGS="-display none"
+fi
+
+if [ -n "$DISK_IMAGE" ] && [ ! -f "$DISK_IMAGE" ]; then
+    echo "error: disk image not found: $DISK_IMAGE" >&2
+    exit 1
+fi
+
+if [ -z "$DISK_IMAGE" ]; then
+    # shellcheck disable=SC2086
+    exec "$QEMU" -machine pc -m 32M -kernel "$IMAGE" $DISPLAY_ARGS \
+        -monitor none -serial none -debugcon stdio \
+        -global isa-debugcon.iobase=0xe9
+fi
+
+if [ "$DISK_MODE" = ahci ]; then
+    # shellcheck disable=SC2086
+    exec "$QEMU" -machine q35 -m 32M -kernel "$IMAGE" \
+        -device ich9-ahci,id=bafahci \
+        -drive "file=$DISK_IMAGE,format=raw,if=none,id=bafdisk" \
+        -device ide-hd,drive=bafdisk,bus=bafahci.0 $DISPLAY_ARGS \
+        -monitor none -serial none -debugcon stdio \
+        -global isa-debugcon.iobase=0xe9
+fi
+
+# shellcheck disable=SC2086
+exec "$QEMU" -machine pc -m 32M -kernel "$IMAGE" \
+    -drive "file=$DISK_IMAGE,format=raw,if=ide,index=0,media=disk" \
+    $DISPLAY_ARGS -monitor none -serial none -debugcon stdio \
+    -global isa-debugcon.iobase=0xe9

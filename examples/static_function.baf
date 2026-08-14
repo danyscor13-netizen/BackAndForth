@@ -1,0 +1,11 @@
+func -> print(arg) {
+    putsc(arg)
+}
+
+static func -> hi() {
+    print(arg: "hi")
+}
+
+begin {
+    hi()
+}

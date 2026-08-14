@@ -1,0 +1,16 @@
+begin {
+    Disk.Scan()
+    disk.select(0)
+    disk.format()
+
+    Disk.CreateDir("docs")
+    Disk.GotoDir("docs")
+    putsc(Disk.GetDir())
+
+    disk.write("hello.txt", "Hello from a BAFS directory!")
+    putsc(disk.read("hello.txt"))
+    disk.files()
+    disk.info()
+    disk.rem("hello.txt")
+    Disk.GotoDir("..")
+}

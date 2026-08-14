@@ -1,0 +1,21 @@
+// The string library and '+' concatenation.
+
+begin {
+    str name = "BackAndForth"
+
+    putsc("length      = " + Str.Length(name))
+    putsc("substring   = " + Str.Sub(name, 4, 3))
+    putsc("concat      = " + Str.Concat("Back", "Forth"))
+    putsc("from int    = " + Str.FromInt(2026))
+    putsc("from bool   = " + Str.FromBool(true))
+    putsc("to int + 1  = " + (Str.ToInt("41") + 1))
+    putsc("equals      = " + Str.Equals(name, "BackAndForth"))
+
+    // '+' converts int and bool operands when either side is a str.
+    int version = 7
+    putsc("version " + version + ", ready = " + true)
+
+    if (name == "BackAndForth") {
+        putsc("== compares string contents, not addresses")
+    }
+}

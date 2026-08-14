@@ -1,0 +1,60 @@
+func -> open_editor() {
+    str name = inpt("File: ")
+    str content
+    str command
+    bool editing = true
+
+    switch (Disk.Exists(name)) {
+        case true {
+            content = Disk.Read(name)
+            putsc("Loaded ", name)
+        }
+
+        case false {
+            content = ""
+            putsc("New file ", name)
+        }
+    }
+
+    putsc("Commands: show, write, save, quit")
+
+    while (editing) {
+        command = inpt("edit> ")
+
+        switch (command) {
+            case "show" {
+                putsc(content)
+            }
+
+            case "write" {
+                content = inpt("Content: ")
+            }
+
+            case "save" {
+                switch (Disk.Write(name, content)) {
+                    case true {
+                        putsc("Saved ", name)
+                    }
+
+                    case false {
+                        putsc("Save failed")
+                    }
+                }
+            }
+
+            case "quit" {
+                editing = false
+            }
+
+            default {
+                putsc("show, write, save, quit")
+            }
+        }
+    }
+}
+
+begin {
+    Disk.Scan()
+    Disk.Select(0)
+    open_editor()
+}

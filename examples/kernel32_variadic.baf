@@ -1,0 +1,9 @@
+begin {
+    int version = 6
+    bool ready = true
+    putsc("BackAndForth ", version, " ready=", ready)
+
+    str first = inpt("First: ")
+    str second = inpt("Second: ")
+    putsc(first, " / ", second)
+}

@@ -1,0 +1,14 @@
+func -> add_and_ignore(left: int, right: int) {
+    int out
+    out = left + right
+}
+
+begin {
+    int a = 10
+    int b = 10
+    int out
+
+    out = a + b
+    add_and_ignore(left: out, right: 22)
+    putsc("integer math compiled successfully")
+}

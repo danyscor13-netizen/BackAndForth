@@ -1,0 +1,6 @@
+begin {
+    str name = inpt("Name", ": ")
+    str content = inpt("Content", ": ")
+
+    putsc("name=", name, " content=", content)
+}

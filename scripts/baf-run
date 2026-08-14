@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: $0 program.baf" >&2
+    exit 2
+fi
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SOURCE=$1
+case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$(pwd)/$SOURCE" ;;
+esac
+
+mkdir -p "$ROOT/build/run"
+make -s -C "$ROOT" all
+BASE=$(basename "$SOURCE" .baf)
+IR="$ROOT/build/run/$BASE.ll"
+EXE="$ROOT/build/run/$BASE"
+
+"$ROOT/build/bafc" "$SOURCE" -o "$IR"
+clang -Wno-override-module "$IR" "$ROOT/runtime/posix.ll" -o "$EXE"
+exec "$EXE"

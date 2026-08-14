@@ -1,0 +1,6 @@
+begin {
+    Disk.Scan()
+    int count = Disk.Count()
+    Disk.List()
+    Disk.Hex(disk: 0, lba: 0)
+}

@@ -1,0 +1,27 @@
+// Functions with return types, recursion, and default (void) functions.
+
+func -> square(n: int) : int {
+    return n * n
+}
+
+func -> factorial(n: int) : int {
+    if (n <= 1) { return 1 }
+    return n * factorial(n - 1)
+}
+
+// No ': type' means the function returns nothing.
+func -> banner(title: str) {
+    putsc("== " + title + " ==")
+}
+
+// A function whose return type is inferred from its return statements.
+func -> isPositive(n: int) {
+    return n > 0
+}
+
+begin {
+    banner("functions")
+    putsc("square(7)    = " + square(7))
+    putsc("factorial(6) = " + factorial(6))
+    putsc("isPositive(-3) = " + isPositive(-3))
+}

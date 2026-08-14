@@ -1,0 +1,8 @@
+func -> moreargs(arg1, arg2) {
+    putsc(arg1)
+    putsc(arg2)
+}
+
+begin {
+    moreargs(arg2: "arg 2!", arg1: "arg 1!")
+}

@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SOURCE=${1:-"$ROOT/examples/kernel32_hello.baf"}
+"$ROOT/scripts/baf-kernel32" "$SOURCE" >/dev/null
+BASE=$(basename "$SOURCE" .baf)
+ELF="$ROOT/build/i386/$BASE.elf"
+IMAGE="$ROOT/build/i386/$BASE.bin"
+
+python3 - "$ELF" "$IMAGE" <<'PY'
+from pathlib import Path
+import struct
+import subprocess
+import sys
+
+elf = Path(sys.argv[1])
+image = Path(sys.argv[2])
+data = image.read_bytes()
+
+if len(data) < 32:
+    raise SystemExit("FAIL: flat image is too small")
+
+magic, flags, checksum, header_addr, load_addr, load_end, bss_end, entry = \
+    struct.unpack_from("<8I", data, 0)
+
+errors = []
+if magic != 0x1BADB002:
+    errors.append(f"bad Multiboot magic: 0x{magic:08x}")
+if (magic + flags + checksum) & 0xFFFFFFFF:
+    errors.append("bad Multiboot checksum")
+if not flags & 0x00010000:
+    errors.append("explicit address flag is missing")
+if header_addr != load_addr:
+    errors.append("flat image header/load mapping is inconsistent")
+if load_end - load_addr != len(data):
+    errors.append(
+        f"image length mismatch: header says {load_end-load_addr}, file has {len(data)}"
+    )
+if bss_end < load_end:
+    errors.append("BSS end precedes loaded data end")
+if not (load_addr <= entry < load_end):
+    errors.append("entry point is outside loaded image")
+
+header = subprocess.check_output(["readelf", "-h", str(elf)], text=True)
+if "ELF32" not in header or "Intel 80386" not in header:
+    errors.append("debug ELF is not an i386 ELF32 executable")
+
+if errors:
+    for error in errors:
+        print(f"FAIL: {error}")
+    raise SystemExit(1)
+
+print("PASS: Multiboot flat image")
+print(f"  image:       {image}")
+print(f"  bytes:       {len(data)}")
+print(f"  load:        0x{load_addr:08x}..0x{load_end:08x}")
+print(f"  zero to:     0x{bss_end:08x}")
+print(f"  entry:       0x{entry:08x}")
+print(f"  flags:       0x{flags:08x}")
+PY

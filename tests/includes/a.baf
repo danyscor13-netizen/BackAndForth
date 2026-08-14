@@ -1,0 +1,2 @@
+[include "b.baf"]
+func -> a() {}

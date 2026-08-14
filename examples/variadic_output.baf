@@ -1,0 +1,7 @@
+begin {
+    int answer = 42
+    bool ready = true
+
+    putl("answer=", answer, " ready=", ready)
+    putsc("!")
+}
